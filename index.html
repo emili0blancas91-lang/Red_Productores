@@ -28,7 +28,7 @@
   --sidebar:390px; --header:64px;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--crema);color:var(--tinta);
+html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;background:var(--crema);color:var(--tinta);
   font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
 button,input,select{font:inherit;color:inherit}
 a{color:var(--azul-osc)}
@@ -186,6 +186,12 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif;font-weight:600;margin:0;letter-spac
   .side{position:fixed;top:var(--header);left:0;bottom:0;width:min(92vw,390px);transform:translateX(-102%);transition:transform .25s;box-shadow:var(--sombra)}
   .side.open{transform:none}
   .scrim.on{display:block;position:fixed;inset:var(--header) 0 0 0;background:rgba(0,0,0,.25);z-index:850}
+  .pp .leaflet-popup-content{width:min(300px, calc(100vw - 40px))!important;max-height:calc(100vh - var(--header) - 90px);max-height:calc(100dvh - var(--header) - 90px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .pp-foto{height:140px}
+  .pp-b{padding:10px 12px 12px}
+  .pp-b h2{font-size:16.5px}
+  .pp-acts a{padding:8px 11px}
+  .legend{display:none}
   .lb-stage img{max-width:100%}
   .lb-nav{display:none}
 }
@@ -332,6 +338,7 @@ const DEMO = [
    UTILIDADES
    ===================================================================== */
 const $ = s => document.querySelector(s);
+const esMovil = () => window.matchMedia("(max-width: 900px)").matches;
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const norm = s => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
 const isNo = v => ["no","0","false","n","inactivo","baja"].includes(norm(v));
@@ -552,8 +559,12 @@ function prepare(rows){
   return out;
 }
 
+// Los avisos solo se muestran al administrador: abre el mapa con ?revisar al final de la liga
+const MODO_REVISION = /[?&]revisar\b/.test(location.search);
 function showIssues(){
   if (!ISSUES.length) return;
+  console.info("Avisos de datos:", ISSUES);
+  if (!MODO_REVISION) return;
   const graves = ISSUES.filter(x => x.grave), leves = ISSUES.filter(x => !x.grave);
   const li = x => `<li><b>Fila ${x.fila}</b> · ${esc(x.nombre)} — ${esc(x.motivo)}</li>`;
   let h = "";
@@ -589,7 +600,7 @@ L.control.layers(base, null, { position: "topright" }).addTo(map);
 L.control.scale({ imperial: false, position: "bottomleft" }).addTo(map);
 
 const cluster = L.markerClusterGroup({
-  showCoverageOnHover: false, maxClusterRadius: 45, spiderfyOnMaxZoom: true,
+  showCoverageOnHover: false, maxClusterRadius: 45, spiderfyOnMaxZoom: true, removeOutsideVisibleBounds: false,
   iconCreateFunction: c => {
     const n = c.getChildCount(), s = n < 10 ? 36 : n < 50 ? 44 : 52;
     return L.divIcon({ html: `<div class="cl" style="width:${s}px;height:${s}px">${n}</div>`, className: "pin", iconSize: [s, s] });
@@ -703,7 +714,9 @@ function render(fit){
   MARKERS.clear();
   rows.forEach(p => {
     const m = L.marker([p._lat, p._lon], { icon: pinIcon(p), title: p.nombre });
-    m.bindPopup(() => popupHTML(p), { className: "pp", maxWidth: 300, minWidth: 300, autoPanPaddingTopLeft: [20, 70] });
+    const w = Math.min(300, window.innerWidth - 40);
+    m.bindPopup(() => popupHTML(p), { className: "pp", maxWidth: w, minWidth: w,
+      autoPanPaddingTopLeft: [12, 12], autoPanPaddingBottomRight: [12, 12], closeOnClick: !esMovil() });
     m.on("popupopen", () => highlight(p._id));
     MARKERS.set(p._id, m);
     cluster.addLayer(m);
@@ -739,17 +752,28 @@ function render(fit){
 function highlight(id){
   document.querySelectorAll(".card.act").forEach(c => c.classList.remove("act"));
   const c = document.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
-  if (c){ c.classList.add("act"); c.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+  if (c){
+    c.classList.add("act");
+    const side = $("#side");
+    if (!esMovil() || side.classList.contains("open")){
+      const l = $("#list"), top = c.offsetTop - l.offsetTop;
+      if (top < l.scrollTop || top + c.offsetHeight > l.scrollTop + l.clientHeight) l.scrollTo({ top: top - 10, behavior: "smooth" });
+    }
+  }
 }
 
 function focusOn(id){
   const m = MARKERS.get(id);
   if (!m) return;
   closeSide();
-  cluster.zoomToShowLayer(m, () => {
-    if (map.getZoom() < 12) map.setView(m.getLatLng(), 13, { animate: true });
-    setTimeout(() => m.openPopup(), map.getZoom() < 12 ? 400 : 0);
-  });
+  const abrir = () => setTimeout(() => m.openPopup(), 60);
+  setTimeout(() => {               // deja terminar el cierre del panel en móvil
+    map.invalidateSize();
+    cluster.zoomToShowLayer(m, () => {
+      if (map.getZoom() < 12){ map.once("moveend", abrir); map.setView(m.getLatLng(), 13, { animate: true }); }
+      else abrir();
+    });
+  }, esMovil() ? 280 : 0);
 }
 
 /* ---------- Eventos de UI ---------- */
