@@ -532,11 +532,17 @@ function prepare(rows){
     if (c.error){ ISSUES.push({ fila: i + 2, nombre: r.nombre, motivo: c.error, grave: true }); return; }
     if (c.nota) ISSUES.push({ fila: i + 2, nombre: r.nombre, motivo: c.nota, grave: false });
     const cat = categoria(r.categoria);
+    const todas = splitList(r.imagenes);
+    const fotos = todas.filter(u => !/\/folders\//.test(u) && (/^https?:\/\//i.test(u) || driveId(u)));
+    if (todas.some(u => /\/folders\//.test(u)))
+      ISSUES.push({ fila: i + 2, nombre: r.nombre, motivo: "en «imagenes» hay una liga de carpeta; usa el menú 🌵 Geovisor → Actualizar fotos en la hoja", grave: false });
+    else if (fotos.length < todas.length)
+      ISSUES.push({ fila: i + 2, nombre: r.nombre, motivo: "en «imagenes» hay texto que no es liga; usa 🌵 Geovisor → Actualizar fotos", grave: false });
     out.push({
       ...r,
       _id: String(r.id || "p" + i),
       _lat: c.lat, _lon: c.lon, _cat: cat,
-      _fotos: splitList(r.imagenes),
+      _fotos: fotos,
       _productos: splitList(r.productos),
       _servicios: splitList(r.servicios),
       _ver: isSi(r.verificado),
@@ -552,7 +558,7 @@ function showIssues(){
   const li = x => `<li><b>Fila ${x.fila}</b> · ${esc(x.nombre)} — ${esc(x.motivo)}</li>`;
   let h = "";
   if (graves.length) h += `<details class="banner err"><summary><b>${graves.length}</b> registro(s) no se muestran en el mapa — ver cuáles</summary><ul>${graves.map(li).join("")}</ul></details>`;
-  if (leves.length) h += `<details class="banner"><summary><b>${leves.length}</b> coordenada(s) corregidas automáticamente — revisar</summary><ul>${leves.map(li).join("")}</ul></details>`;
+  if (leves.length) h += `<details class="banner"><summary><b>${leves.length}</b> aviso(s) en los datos — revisar</summary><ul>${leves.map(li).join("")}</ul></details>`;
   $("#banner").innerHTML += h;
 }
 
