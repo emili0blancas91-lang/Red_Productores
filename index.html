@@ -288,7 +288,8 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif;font-weight:600;margin:0;letter-spac
 const CONFIG = {
   // Google Sheets → Archivo → Compartir → Publicar en la web → (hoja) → CSV → Publicar
   // Pega aquí la URL que termina en ...output=csv
-  SHEET_CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ3Y8psuZnzjmrw6nZ3NAJd9FXdTsoyMQlU44Rv93Rd8kyKjDUq8zyY5t9O6RYRazIRyL-pocD80o9f/pubhtml",
+  // (si pegas la de "pubhtml" o la liga normal de la hoja, se convierte sola)
+  SHEET_CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ3Y8psuZnzjmrw6nZ3NAJd9FXdTsoyMQlU44Rv93Rd8kyKjDUq8zyY5t9O6RYRazIRyL-pocD80o9f/pub?output=csv",
 
   // Opcional: liga a un Google Form para que propongan nuevos productores
   FORM_URL: "",
@@ -917,6 +918,19 @@ function load(rows, demo){
   if (!demo) showIssues();
 }
 
+// Convierte cualquier liga de Google Sheets en la liga CSV
+function csvUrl(u){
+  u = String(u).trim();
+  const gid = (u.match(/[#&?]gid=(\d+)/) || [])[1];
+  // Publicada en la web: .../d/e/2PACX.../pubhtml  ó  .../pub?output=html
+  let m = u.match(/(https:\/\/docs\.google\.com\/spreadsheets\/d\/e\/[\w-]+)\/pub/);
+  if (m) return `${m[1]}/pub?output=csv${gid ? "&single=true&gid=" + gid : ""}`;
+  // Liga normal de edición: .../d/ID/edit#gid=0  (la hoja debe ser visible para "cualquiera con el enlace")
+  m = u.match(/docs\.google\.com\/spreadsheets\/d\/([\w-]{20,})/);
+  if (m) return `https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv${gid ? "&gid=" + gid : ""}`;
+  return u;
+}
+
 function init(){
   document.title = CONFIG.TITULO;
   $("#titulo").textContent = CONFIG.TITULO;
@@ -925,11 +939,23 @@ function init(){
 
   if (!CONFIG.SHEET_CSV_URL){ load(DEMO, true); return; }
 
-  const url = CONFIG.SHEET_CSV_URL + (CONFIG.SHEET_CSV_URL.includes("?") ? "&" : "?") + "_=" + Date.now();
+  const src = csvUrl(CONFIG.SHEET_CSV_URL);
+  const url = src + (src.includes("?") ? "&" : "?") + "_=" + Date.now();
   Papa.parse(url, {
     download: true, header: true, skipEmptyLines: "greedy",
     transformHeader: headerKey,
-    complete: r => load(r.data, false),
+    complete: r => {
+      const f = r.meta && r.meta.fields || [];
+      if (!f.length || /<html|<!doctype/i.test(f.join(" "))){
+        $("#loader").style.display = "none";
+        $("#banner").innerHTML = `<div class="banner err">La liga no devolvió un CSV. En Sheets usa <b>Archivo → Compartir → Publicar en la web → formato CSV</b>.</div>`;
+        $("#cnt").textContent = "Sin datos"; return;
+      }
+      if (!f.includes("nombre") || !(f.includes("lat") || f.includes("coordenadas"))){
+        $("#banner").innerHTML = `<div class="banner err">Faltan columnas en la hoja. Encontré: <b>${esc(f.join(", "))}</b>. Se necesitan <b>nombre</b> y <b>lat/lon</b> (o <b>coordenadas</b>).</div>`;
+      }
+      load(r.data, false);
+    },
     error: err => {
       console.error(err);
       $("#loader").style.display = "none";
