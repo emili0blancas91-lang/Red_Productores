@@ -172,6 +172,19 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif;font-weight:600;margin:0;letter-spac
 .banner li{margin:2px 0}
 .banner.err{background:#FBE9E5;color:#8A3324;border-color:#F0CFC6}
 .mapwrap{position:relative;min-height:0}
+/* Ficha inferior (solo móvil) */
+.sheet{display:none;position:fixed;left:0;right:0;bottom:0;z-index:1200;flex-direction:column;background:#fff;
+  border-radius:18px 18px 0 0;box-shadow:0 -8px 30px rgba(43,42,38,.18);max-height:78vh;max-height:78dvh;
+  transform:translateY(105%);transition:transform .25s ease;padding-bottom:env(safe-area-inset-bottom)}
+.sheet.on{transform:none}
+.sh-grip{flex:none;height:22px;display:grid;place-items:center;cursor:grab;touch-action:none}
+.sh-grip span{width:42px;height:5px;border-radius:5px;background:#D9D3C5}
+.sh-x{position:absolute;top:30px;right:10px;z-index:3;width:32px;height:32px;border-radius:50%;border:0;
+  background:rgba(0,0,0,.45);color:#fff;font-size:15px;cursor:pointer}
+.sh-body{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.sh-body .pp-foto{height:200px;margin:0 10px;border-radius:12px}
+.sh-body .pp-thumbs{padding:8px 10px 0}
+.sh-body .pp-acts a{padding:9px 12px}
 .scrim{display:none}
 
 /* ---------- RESPONSIVO ---------- */
@@ -186,14 +199,7 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif;font-weight:600;margin:0;letter-spac
   .side{position:fixed;top:var(--header);left:0;bottom:0;width:min(92vw,390px);transform:translateX(-102%);transition:transform .25s;box-shadow:var(--sombra)}
   .side.open{transform:none}
   .scrim.on{display:block;position:fixed;inset:var(--header) 0 0 0;background:rgba(0,0,0,.25);z-index:850}
-  .pp .leaflet-popup-content{width:min(300px, calc(100vw - 40px))!important;max-height:calc(100vh - var(--header) - 90px);max-height:calc(100dvh - var(--header) - 90px);overflow-y:auto;-webkit-overflow-scrolling:touch}
-  .pp-foto{height:140px}
-  .pp .leaflet-popup-content-wrapper{position:relative}
-  .pp .leaflet-popup-content-wrapper::before{content:"";position:absolute;top:7px;left:50%;transform:translateX(-50%);
-    width:38px;height:4px;border-radius:4px;background:rgba(255,255,255,.85);box-shadow:0 0 3px rgba(0,0,0,.3);z-index:6;pointer-events:none}
-  .pp-b{padding:10px 12px 12px}
-  .pp-b h2{font-size:16.5px}
-  .pp-acts a{padding:8px 11px}
+  .sheet{display:flex}
   .legend{display:none}
   .lb-stage img{max-width:100%}
   .lb-nav{display:none}
@@ -263,6 +269,13 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif;font-weight:600;margin:0;letter-spac
     <div id="map"></div>
     <div class="loader" id="loader"><div><div class="spin"></div>Cargando directorio…</div></div>
   </div>
+</div>
+
+<!-- Ficha inferior (móvil) -->
+<div class="sheet" id="sheet" aria-live="polite">
+  <div class="sh-grip"><span></span></div>
+  <button class="sh-x" id="shClose" aria-label="Cerrar ficha">✕</button>
+  <div class="sh-body pp" id="shBody"></div>
 </div>
 
 <!-- Lightbox -->
@@ -463,18 +476,19 @@ function driveId(u){
 }
 function imgUrl(u, w){
   const id = driveId(u);
-  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w${w}` : u;
+  return id ? `https://lh3.googleusercontent.com/d/${id}=w${w}` : u;
 }
 function origUrl(u){
   const id = driveId(u);
   return id ? `https://drive.google.com/file/d/${id}/view` : u;
 }
-// Respaldo si thumbnail falla: servidor lh3
+// Respaldo si lh3 falla: miniatura de Drive; si también falla, se atenúa
 window.driveFallback = function(img){
   if (img.dataset.fb) { img.onerror = null; img.style.opacity = .25; return; }
   img.dataset.fb = 1;
-  const m = img.src.match(/id=([\w-]+)/);
-  if (m) img.src = `https://lh3.googleusercontent.com/d/${m[1]}=w${img.dataset.w || 1200}`;
+  const m = img.src.match(/\/d\/([\w-]+)/) || img.src.match(/id=([\w-]+)/);
+  if (m) img.src = `https://drive.google.com/thumbnail?id=${m[1]}&sz=w${img.dataset.w || 1200}`;
+  else { img.onerror = null; img.style.opacity = .25; }
 };
 
 function categoria(txt){
@@ -638,12 +652,12 @@ function popupHTML(p){
   let foto;
   if (f.length){
     foto = `<div class="pp-foto js-zoom" data-id="${esc(p._id)}" data-i="0">
-      <img src="${esc(imgUrl(f[0], 700))}" data-w="700" alt="${esc(p.nombre)}" loading="lazy" referrerpolicy="no-referrer" onerror="driveFallback(this)">
+      <img src="${esc(imgUrl(f[0], 900))}" data-w="900" alt="${esc(p.nombre)}" referrerpolicy="no-referrer" onerror="driveFallback(this)">
       <span class="zm">⤢ ${f.length > 1 ? f.length + " fotos" : "Ampliar"}</span></div>`;
     if (f.length > 1){
       const max = 5, extra = f.length - max;
       foto += `<div class="pp-thumbs">` + f.slice(1, extra > 0 ? max : f.length).map((u, k) =>
-        `<img class="js-zoom" data-id="${esc(p._id)}" data-i="${k+1}" src="${esc(imgUrl(u, 120))}" data-w="120" loading="lazy" referrerpolicy="no-referrer" onerror="driveFallback(this)" alt="">`).join("")
+        `<img class="js-zoom" data-id="${esc(p._id)}" data-i="${k+1}" src="${esc(imgUrl(u, 120))}" data-w="120" referrerpolicy="no-referrer" onerror="driveFallback(this)" alt="">`).join("")
         + (extra > 0 ? `<span class="js-zoom" data-id="${esc(p._id)}" data-i="${max}">+${extra}</span>` : "") + `</div>`;
     }
   } else {
@@ -717,10 +731,13 @@ function render(fit){
   MARKERS.clear();
   rows.forEach(p => {
     const m = L.marker([p._lat, p._lon], { icon: pinIcon(p), title: p.nombre });
-    const w = Math.min(300, window.innerWidth - 40);
-    m.bindPopup(() => popupHTML(p), { className: "pp", maxWidth: w, minWidth: w,
-      autoPanPaddingTopLeft: [12, 12], autoPanPaddingBottomRight: [12, 12], closeOnClick: !esMovil() });
-    m.on("popupopen", e => { highlight(p._id); if (esMovil()) deslizarParaCerrar(e.popup); });
+    if (MOVIL){
+      m.on("click", () => abrirFicha(p));
+    } else {
+      m.bindPopup(() => popupHTML(p), { className: "pp", maxWidth: 300, minWidth: 300,
+        autoPanPaddingTopLeft: [12, 12], autoPanPaddingBottomRight: [12, 12] });
+      m.on("popupopen", () => highlight(p._id));
+    }
     MARKERS.set(p._id, m);
     cluster.addLayer(m);
   });
@@ -752,41 +769,52 @@ function render(fit){
   }
 }
 
-// Móvil: arrastrar el popup hacia abajo (o hacia los lados) para cerrarlo
-function deslizarParaCerrar(popup){
-  const el = popup.getElement(); if (!el || el.dataset.swipe) return;
-  el.dataset.swipe = 1;
-  const wrap = el.querySelector(".leaflet-popup-content-wrapper");
-  const cont = el.querySelector(".leaflet-popup-content");
-  let x0 = 0, y0 = 0, dx = 0, dy = 0, activo = false, eje = null;
-  el.addEventListener("touchstart", e => {
-    if (e.touches.length !== 1) return;
-    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = dy = 0; eje = null;
-    activo = true; wrap.style.transition = "none";
-  }, { passive: true });
-  el.addEventListener("touchmove", e => {
-    if (!activo) return;
-    dx = e.touches[0].clientX - x0; dy = e.touches[0].clientY - y0;
-    if (!eje && Math.abs(dx) + Math.abs(dy) > 8) eje = Math.abs(dy) > Math.abs(dx) ? "y" : "x";
-    // hacia abajo solo si el contenido ya está arriba del todo (si no, es scroll normal)
-    if (eje === "y" && (dy < 0 || cont.scrollTop > 0)){ activo = false; wrap.style.transform = ""; return; }
-    if (!eje) return;
-    e.preventDefault();
-    const d = eje === "y" ? dy : dx;
-    wrap.style.transform = eje === "y" ? `translateY(${d}px)` : `translateX(${d}px)`;
-    wrap.style.opacity = Math.max(.35, 1 - Math.abs(d) / 300);
-  }, { passive: false });
-  el.addEventListener("touchend", () => {
-    if (!activo) return; activo = false;
-    const d = eje === "y" ? dy : Math.abs(dx);
-    wrap.style.transition = "transform .2s ease, opacity .2s ease";
-    if (d > 70){
-      wrap.style.transform = eje === "y" ? "translateY(120%)" : `translateX(${dx > 0 ? 120 : -120}%)`;
-      wrap.style.opacity = 0;
-      setTimeout(() => { map.closePopup(); }, 180);
-    } else { wrap.style.transform = ""; wrap.style.opacity = 1; }
+/* ---------- Ficha inferior (móvil) ---------- */
+const MOVIL = esMovil();
+let fichaId = null;
+function abrirFicha(p){
+  const sh = $("#sheet"), body = $("#shBody");
+  fichaId = p._id;
+  body.innerHTML = popupHTML(p);
+  body.scrollTop = 0;
+  sh.style.transition = ""; sh.style.transform = "";
+  sh.classList.add("on");
+  // si el punto quedaría tapado por la ficha, se recorre el mapa hacia arriba
+  requestAnimationFrame(() => {
+    const pt = map.latLngToContainerPoint([p._lat, p._lon]);
+    const libre = map.getSize().y - sh.offsetHeight;
+    if (pt.y > libre - 30 || pt.y < 30) map.panBy([0, pt.y - Math.max(60, libre / 2)], { animate: true });
   });
 }
+function cerrarFicha(){
+  const sh = $("#sheet");
+  sh.style.transition = ""; sh.style.transform = "";
+  sh.classList.remove("on"); fichaId = null;
+}
+(function swipeFicha(){
+  const sh = $("#sheet"), body = $("#shBody");
+  let y0 = 0, dy = 0, arrastra = false;
+  sh.addEventListener("touchstart", e => {
+    if (e.touches.length !== 1) return;
+    y0 = e.touches[0].clientY; dy = 0;
+    // se arrastra desde la barra superior, o desde el contenido si ya está hasta arriba
+    arrastra = e.target.closest(".sh-grip") || body.scrollTop <= 0;
+  }, { passive: true });
+  sh.addEventListener("touchmove", e => {
+    if (!arrastra) return;
+    dy = e.touches[0].clientY - y0;
+    if (dy <= 0){ sh.style.transform = ""; return; }   // hacia arriba = scroll normal
+    e.preventDefault();
+    sh.style.transition = "none";
+    sh.style.transform = `translateY(${dy}px)`;
+  }, { passive: false });
+  sh.addEventListener("touchend", () => {
+    if (!arrastra) return; arrastra = false;
+    sh.style.transition = "";
+    if (dy > 90) cerrarFicha(); else sh.style.transform = "";
+  });
+  $("#shClose").addEventListener("click", cerrarFicha);
+})();
 
 function highlight(id){
   document.querySelectorAll(".card.act").forEach(c => c.classList.remove("act"));
@@ -805,13 +833,23 @@ function focusOn(id){
   const m = MARKERS.get(id);
   if (!m) return;
   closeSide();
-  const abrir = () => setTimeout(() => m.openPopup(), 60);
+  if (MOVIL){
+    const p = BY_ID.get(id);
+    setTimeout(() => {
+      map.invalidateSize();
+      map.setView(m.getLatLng(), Math.max(map.getZoom(), 13), { animate: false });
+      abrirFicha(p);
+    }, 280);
+    return;
+  }
+  // Abre el popup solo cuando el mapa y el agrupador terminaron de moverse
+  const abrir = () => cluster.zoomToShowLayer(m, () => setTimeout(() => m.openPopup(), 80));
   setTimeout(() => {               // deja terminar el cierre del panel en móvil
     map.invalidateSize();
-    cluster.zoomToShowLayer(m, () => {
-      if (map.getZoom() < 12){ map.once("moveend", abrir); map.setView(m.getLatLng(), 13, { animate: true }); }
-      else abrir();
-    });
+    if (map.getZoom() < 12){
+      map.once("moveend", () => setTimeout(abrir, 350));   // 350 ms: animación del agrupador
+      map.setView(m.getLatLng(), 13, { animate: true });
+    } else abrir();
   }, esMovil() ? 280 : 0);
 }
 
@@ -839,6 +877,7 @@ const openSide = () => { $("#side").classList.add("open"); $("#scrim").classList
 function closeSide(){ $("#side").classList.remove("open"); $("#scrim").classList.remove("on"); }
 $("#btnMenu").addEventListener("click", () => $("#side").classList.contains("open") ? closeSide() : openSide());
 $("#scrim").addEventListener("click", closeSide);
+map.on("click", () => { if (MOVIL) cerrarFicha(); });
 
 /* =====================================================================
    LIGHTBOX — zoom con rueda, pellizco, doble clic y arrastre
